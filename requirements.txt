@@ -1,0 +1,10 @@
+torch
+transformers>=4.40.0
+datasets
+pandas
+scikit-learn
+numpy
+tqdm
+kaggle
+accelerate>=1.1.0
+python-dotenv
