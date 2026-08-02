@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Static analysis only — no torch/transformers install here (heavy,
+      # and unnecessary: ruff parses the AST, it never imports the code).
+      - run: pip install ruff
+
+      - run: ruff check .

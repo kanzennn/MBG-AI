@@ -1,0 +1,62 @@
+# The Dockerfile only COPYs requirements.txt, main.py, and ingest/ — this
+# keeps the build context small and prevents anything below from ever
+# entering an image layer, even if it exists on disk but isn't committed.
+
+# Git metadata
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Python environment & bytecode
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Datasets, trained models, training reports — large binary artifacts,
+# never baked into the image. The VPS mounts a trained model directory in
+# as a volume instead (see docker-compose.yml).
+data/
+model_output*/
+reports/
+
+# HuggingFace / torch cache
+.cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Deployment files (not part of the app itself)
+docker-compose.yml
+
+# Env & secrets
+.env
+.env.example
+.env.local
+*.env.local
+kaggle.json
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Misc
+README.md

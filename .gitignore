@@ -17,7 +17,7 @@ env/
 data/
 
 # Model checkpoints & output
-model_output/
+model_output*/
 
 # Training reports
 reports/
@@ -27,7 +27,12 @@ reports/
 *.safetensors
 *.bin
 *.pt
+*.pth
 *.ckpt
+
+# Linting / testing caches
+.ruff_cache/
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -35,6 +40,7 @@ reports/
 
 # Claude Code
 .claude/
+CLAUDE.md
 
 # IDE
 .idea/

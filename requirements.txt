@@ -8,3 +8,4 @@ tqdm
 kaggle
 accelerate>=1.1.0
 python-dotenv
+requests

@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ${APP_IMAGE:-sentiment-analysis:latest}
+    container_name: sentiment-app
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Trained model weights are gitignored (large binary artifact) and
+      # never baked into the image — train locally, then copy the resulting
+      # model_output_tweet/best directory here once. Must match
+      # INGEST_MODEL_DIR in .env (default: model_output_tweet/best).
+      - ./model_output_tweet:/app/model_output_tweet:ro
+    extra_hosts:
+      # Lets ARGUS_BASE_URL/PAWONWARGA_BASE_URL point at
+      # http://host.docker.internal:<port> to reach the Argus and
+      # PawonWarga-BE containers' ports published on this same VPS host.
+      - "host.docker.internal:host-gateway"
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
