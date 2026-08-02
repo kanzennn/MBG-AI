@@ -22,6 +22,9 @@ model_output*/
 # Training reports
 reports/
 
+# Ingest worker logs (see ingest/worker.py, INGEST_LOG_FILE)
+logs/
+
 # HuggingFace cache
 .cache/
 *.safetensors

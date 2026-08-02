@@ -9,6 +9,8 @@ in ingest/labeler.py, I/O in ingest/clients.
 
 import logging
 import time
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from ingest.clients.argus_client import TARGET_COLLECTION, ArgusClient
 from ingest.clients.pawonwarga_client import PawonWargaClient
@@ -19,17 +21,25 @@ from ingest.labeler import Labeler
 logger = logging.getLogger(__name__)
 
 
-def _configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+def _configure_logging(log_file: str) -> None:
+    # Two sinks: stdout (captured by `docker exec`/cron's own redirect, and
+    # useful for a live `docker exec ... tail`) and a rotating file the VPS
+    # host can read directly via docker-compose.yml's ./logs volume mount —
+    # no need to exec into the container just to check on a run.
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+
+    file_handler = RotatingFileHandler(log_file, maxBytes=10_000_000, backupCount=5, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    logging.basicConfig(level=logging.INFO, handlers=[stream_handler, file_handler])
 
 
 def run(settings: Settings | None = None) -> None:
-    _configure_logging()
     settings = settings or load_settings()
+    _configure_logging(settings.log_file)
 
     argus = ArgusClient(settings.argus_base_url)
     pawonwarga = PawonWargaClient(settings.pawonwarga_base_url, settings.pawonwarga_api_key)

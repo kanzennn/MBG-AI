@@ -24,6 +24,7 @@ build/
 data/
 model_output*/
 reports/
+logs/
 
 # HuggingFace / torch cache
 .cache/

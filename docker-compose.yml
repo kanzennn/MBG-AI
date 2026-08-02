@@ -10,6 +10,10 @@ services:
       # model_output_tweet/best directory here once. Must match
       # INGEST_MODEL_DIR in .env (default: model_output_tweet/best).
       - ./model_output_tweet:/app/model_output_tweet:ro
+      # Ingest run logs (rotating, see ingest/worker.py) — readable directly
+      # from the host at ./logs/ingest.log without exec-ing into the
+      # container. Must match INGEST_LOG_FILE in .env (default: logs/ingest.log).
+      - ./logs:/app/logs
     extra_hosts:
       # Lets ARGUS_BASE_URL/PAWONWARGA_BASE_URL point at
       # http://host.docker.internal:<port> to reach the Argus and

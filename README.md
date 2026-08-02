@@ -101,7 +101,7 @@ cp .env.example .env
 python main.py ingest
 ```
 
-Config is entirely environment-driven — see [ingest/config.py](ingest/config.py) and `.env.example`. `INGEST_MODEL_DIR` (default `model_output_tweet/best`) must point at a trained model directory.
+Config is entirely environment-driven — see [ingest/config.py](ingest/config.py) and `.env.example`. `INGEST_MODEL_DIR` (default `model_output_tweet/best`) must point at a trained model directory. Every run logs to both stdout and a rotating log file (`INGEST_LOG_FILE`, default `logs/ingest.log`, 10MB × 5 backups) — see [Docker](#docker) below for where that file lands when deployed.
 
 ## Docker
 
@@ -116,6 +116,10 @@ The image only contains `main.py`, `ingest/`, and installed dependencies — it 
 
 - `docker-compose.yml` mounts `./model_output_tweet` read-only into the container — train locally (or elsewhere), then copy the resulting `best/` directory to the server once. There is no in-container training. (The base `model_output/` isn't mounted — the deployed ingest worker only ever runs the tweet model.)
 - `ARGUS_BASE_URL` / `PAWONWARGA_BASE_URL` should point at `http://host.docker.internal:<port>` to reach Argus/PawonWarga-BE's ports published on the same VPS host (the compose file sets up `extra_hosts` for this).
+- `docker-compose.yml` also mounts `./logs` (read-write) into the container, matching `INGEST_LOG_FILE`. Every ingest run's log ends up readable directly on the host — no need to `docker exec`/`docker logs` to check on it:
+  ```bash
+  tail -f /opt/pawonwarga/kira/logs/ingest.log
+  ```
 
 ## CI/CD (Deploy to VPS)
 
@@ -137,7 +141,7 @@ The image only contains `main.py`, `ingest/`, and installed dependencies — it 
 **One-time server setup:**
 
 ```bash
-mkdir -p /opt/pawonwarga/kira
+mkdir -p /opt/pawonwarga/kira/logs
 # copy docker-compose.yml and a filled-in .env to /opt/pawonwarga/kira/
 # copy the trained model directory (model_output_tweet/best) there too
 ```
