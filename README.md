@@ -145,7 +145,7 @@ mkdir -p /opt/pawonwarga/kira
 Then schedule the ingest job in cron:
 
 ```cron
-*/15 * * * * cd /opt/pawonwarga/kira && docker exec sentiment-app python main.py ingest >> /var/log/sentiment-ingest.log 2>&1
+*/30 * * * * cd /opt/pawonwarga/kira && docker exec sentiment-app python main.py ingest >> /var/log/sentiment-ingest.log 2>&1
 ```
 
 After the one-time setup, every push to `main` redeploys the image automatically; the cron schedule and the container's model volume are untouched by a deploy.
