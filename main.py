@@ -528,23 +528,33 @@ def baseline():
 
 # ── Inference ────────────────────────────────────────────────────────────────
 
+def _select_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def load_model(model_dir: str = str(OUTPUT_DIR / "best")):
     """Load tokenizer + model once. Reuse across many predict_with_model() calls
     instead of calling predict() per text/batch, which reloads the weights
-    every time (see ingest/labeler.py for the worker's usage)."""
+    every time (see ingest/labeler.py for the worker's usage). Moves the model
+    to the GPU when one is available — predict_with_model() reads the device
+    back off the model, so no other call site needs to change."""
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     model = AutoModelForSequenceClassification.from_pretrained(model_dir)
+    model.to(_select_device())
     model.eval()
     return tokenizer, model
 
 
 def predict_with_model(tokenizer, model, texts: list[str], max_length: int = 256) -> list[dict]:
     """Return label + confidence for each text using an already-loaded model."""
+    device = next(model.parameters()).device
     cleaned = _clean_text(pd.Series(texts)).tolist()
-    inputs = tokenizer(cleaned, truncation=True, padding=True, max_length=max_length, return_tensors="pt")
+    inputs = tokenizer(
+        cleaned, truncation=True, padding=True, max_length=max_length, return_tensors="pt"
+    ).to(device)
     with torch.no_grad():
         logits = model(**inputs).logits
-    probs = torch.softmax(logits, dim=-1).numpy()
+    probs = torch.softmax(logits, dim=-1).cpu().numpy()
 
     results = []
     for prob_row in probs:
@@ -601,6 +611,93 @@ def label_csv(
     print(f"\nLabeled {len(df):,} rows → {output_path}")
 
 
+# ── Label audit ──────────────────────────────────────────────────────────────
+
+def _previous_audit_files() -> list[Path]:
+    """Every past audit round's output, so a new round automatically skips text
+    that was already reviewed — including candidates the new round itself
+    produces, once that file lands here for the *next* run."""
+    return sorted(REPORTS_DIR.glob("label_audit_*.csv"))
+
+
+def find_label_disagreements(
+    confidence_threshold: float = 0.90,
+    top_n: int | None = None,
+    exclude: list[str] | None = None,
+    model_dir: str | None = None,
+    max_length: int = 256,
+    batch_size: int = 64,
+    output: str | None = None,
+):
+    """Re-run the trained model over data/merged_labeled.csv and surface rows
+    where the model disagrees with the stored label at high confidence — the
+    same "model is probably right, label is probably wrong" signal used for
+    reports/label_audit_candidates.csv (see reports/CATATAN_SESI_2026-07-06.md).
+    Rows whose text already appears in a previous reports/label_audit_*.csv are
+    skipped, so re-running this after a review round only surfaces new ground.
+    """
+    model_dir = model_dir or _default_model_dir()
+    exclude_paths = [Path(p) for p in exclude] if exclude else _previous_audit_files()
+
+    df = _read_csv(DATA_DIR / "merged_labeled.csv")
+    df.columns = [c.lower().strip() for c in df.columns]
+    df = df.dropna(subset=["text", "label"])
+    df["text"] = _clean_text(df["text"])
+    df["label"] = df["label"].astype(str).str.strip().str.capitalize()
+    df = df[df["label"].isin(LABELS)].reset_index(drop=True)
+
+    already_audited: set[str] = set()
+    for path in exclude_paths:
+        if not path.exists():
+            print(f"  (skip, not found: {path})")
+            continue
+        prev = _read_csv(path)
+        prev.columns = [c.lower().strip() for c in prev.columns]
+        if "text" in prev.columns:
+            already_audited.update(_clean_text(prev["text"].dropna()).tolist())
+        print(f"  excluding already-reviewed text from {path}")
+
+    before = len(df)
+    df = df[~df["text"].isin(already_audited)].reset_index(drop=True)
+    print(f"Excluded {before - len(df):,} rows already covered by previous audits.")
+
+    tokenizer, model = load_model(model_dir)
+    print(f"Running {len(df):,} remaining rows through {model_dir} ...")
+
+    preds, confs = [], []
+    for i in range(0, len(df), batch_size):
+        batch = df["text"].iloc[i : i + batch_size].tolist()
+        results = predict_with_model(tokenizer, model, batch, max_length)
+        preds.extend(r["label"] for r in results)
+        confs.extend(r["confidence"] for r in results)
+        done = min(i + batch_size, len(df))
+        print(f"  {done:,} / {len(df):,}", end="\r")
+    print()
+
+    df["pred"] = preds
+    df["conf"] = confs
+
+    candidates = df[(df["pred"] != df["label"]) & (df["conf"] >= confidence_threshold)]
+    candidates = candidates.sort_values("conf", ascending=False)
+    if top_n:
+        candidates = candidates.head(top_n)
+
+    cols = ["text", "label", "pred", "conf"]
+    if "source_file" in candidates.columns:
+        cols = ["source_file"] + cols
+    candidates = candidates[cols].rename(columns={"label": "sentiment", "source_file": "source"})
+
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = Path(output) if output else REPORTS_DIR / f"label_audit_candidates_{ts}.csv"
+    candidates.to_csv(out_path, index=False)
+    print(
+        f"\n{len(candidates):,} candidates (model disagrees, confidence >= "
+        f"{confidence_threshold:.0%}) -> {out_path}"
+    )
+    return out_path
+
+
 def _default_model_dir() -> str:
     """Most recently modified model_output_tweet*/best directory, or
     OUTPUT_DIR if none has been trained yet. Keeps evaluate/predict/label's
@@ -654,6 +751,21 @@ if __name__ == "__main__":
              "and push to PawonWarga-BE. Config via env — see .env.example.",
     )
 
+    audit_p = subparsers.add_parser(
+        "audit",
+        help="Find rows in data/merged_labeled.csv where the model disagrees "
+             "with the stored label at high confidence, skipping text already "
+             "covered by a previous reports/label_audit_*.csv round. Writes a "
+             "new reports/label_audit_candidates_<timestamp>.csv for review.",
+    )
+    audit_p.add_argument("--confidence-threshold", type=float, default=0.90)
+    audit_p.add_argument("--top-n", type=int, default=None, help="Keep only the N highest-confidence candidates")
+    audit_p.add_argument("--exclude", nargs="*", default=None, help="Override which past audit CSVs to skip (default: all reports/label_audit_*.csv)")
+    audit_p.add_argument("--model-dir", default=_default_model_dir())
+    audit_p.add_argument("--max-length", type=int, default=256)
+    audit_p.add_argument("--batch-size", type=int, default=64)
+    audit_p.add_argument("--output", default=None)
+
     args = parser.parse_args()
 
     if args.command == "train":
@@ -674,5 +786,15 @@ if __name__ == "__main__":
         # defining them (i.e. at module load time) would be a circular import.
         from ingest.worker import run
         run()
+    elif args.command == "audit":
+        find_label_disagreements(
+            args.confidence_threshold,
+            args.top_n,
+            args.exclude,
+            args.model_dir,
+            args.max_length,
+            args.batch_size,
+            args.output,
+        )
     else:
         parser.print_help()
