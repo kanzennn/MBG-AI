@@ -15,9 +15,10 @@ services:
       # container. Must match INGEST_LOG_FILE in .env (default: logs/ingest.log).
       - ./logs:/app/logs
     extra_hosts:
-      # Lets ARGUS_BASE_URL/PAWONWARGA_BASE_URL point at
-      # http://host.docker.internal:<port> to reach the Argus and
-      # PawonWarga-BE containers' ports published on this same VPS host.
+      # Lets PAWONWARGA_BASE_URL point at http://host.docker.internal:<port>
+      # to reach PawonWarga-BE's port published on this same VPS host.
+      # MONGODB_URL reaches Argus v3's MongoDB directly (its own host/IP, not
+      # via this gateway) — see ingest/config.py.
       - "host.docker.internal:host-gateway"
     networks:
       - internal

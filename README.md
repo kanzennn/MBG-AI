@@ -92,11 +92,11 @@ python main.py label --input data/raw_scrape.csv --output data/labeled.csv
 
 ## Ingest Worker
 
-`python main.py ingest` pulls pending `posts_with_comments` batches from [Argus](../Argus), labels them with a trained model, and pushes the results to PawonWarga-BE's internal ingest endpoint. It is a **one-shot batch job**, not a server — run it manually, or on a schedule via cron (see [CI/CD](#cicd-deploy-to-vps) below).
+`python main.py ingest` pulls pending `posts_with_comments` batches directly out of [Argus v3](../ARGUS_V3)'s MongoDB (`sentimen_{platform}.posts_with_comments` — Argus v3 has no batch-polling HTTP API of its own, see [ingest/clients/argus_client.py](ingest/clients/argus_client.py)), labels them with a trained model, and pushes the results to PawonWarga-BE's internal ingest endpoint. It is a **one-shot batch job**, not a server — run it manually, or on a schedule via cron (see [CI/CD](#cicd-deploy-to-vps) below).
 
 ```powershell
 cp .env.example .env
-# fill in ARGUS_BASE_URL, PAWONWARGA_BASE_URL, PAWONWARGA_API_KEY
+# fill in MONGODB_URL, PAWONWARGA_BASE_URL, PAWONWARGA_API_KEY
 
 python main.py ingest
 ```
@@ -115,7 +115,7 @@ The image only contains `main.py`, `ingest/`, and installed dependencies — it 
 **Important notes:**
 
 - `docker-compose.yml` mounts `./model_output_tweet` read-only into the container — train locally (or elsewhere), then copy the resulting `best/` directory to the server once. There is no in-container training. (The base `model_output/` isn't mounted — the deployed ingest worker only ever runs the tweet model.)
-- `ARGUS_BASE_URL` / `PAWONWARGA_BASE_URL` should point at `http://host.docker.internal:<port>` to reach Argus/PawonWarga-BE's ports published on the same VPS host (the compose file sets up `extra_hosts` for this).
+- `PAWONWARGA_BASE_URL` should point at `http://host.docker.internal:<port>` to reach PawonWarga-BE's port published on the same VPS host (the compose file sets up `extra_hosts` for this). `MONGODB_URL` points at Argus v3's MongoDB directly — same value as `ARGUS_V3/.env`'s `MONGODB_URL`.
 - `docker-compose.yml` also mounts `./logs` (read-write) into the container, matching `INGEST_LOG_FILE`. Every ingest run's log ends up readable directly on the host — no need to `docker exec`/`docker logs` to check on it:
   ```bash
   tail -f /opt/pawonwarga/kira/logs/ingest.log

@@ -41,7 +41,7 @@ def run(settings: Settings | None = None) -> None:
     settings = settings or load_settings()
     _configure_logging(settings.log_file)
 
-    argus = ArgusClient(settings.argus_base_url)
+    argus = ArgusClient(settings.mongodb_url)
     pawonwarga = PawonWargaClient(settings.pawonwarga_base_url, settings.pawonwarga_api_key)
 
     logger.info("loading model from %s ...", settings.model_dir)
@@ -49,8 +49,11 @@ def run(settings: Settings | None = None) -> None:
     logger.info("model loaded (version=%s)", settings.model_version)
 
     started = time.monotonic()
-    for platform in settings.platforms:
-        _run_platform(platform, argus, pawonwarga, labeler, settings.batch_page_size)
+    try:
+        for platform in settings.platforms:
+            _run_platform(platform, argus, pawonwarga, labeler, settings.batch_page_size)
+    finally:
+        argus.close()
     logger.info("=== ingest run finished in %.1fs ===", time.monotonic() - started)
 
 

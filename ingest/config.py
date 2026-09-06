@@ -12,7 +12,7 @@ PLATFORMS = ("instagram", "x", "tiktok")
 
 @dataclass(frozen=True)
 class Settings:
-    argus_base_url: str
+    mongodb_url: str
     pawonwarga_base_url: str
     pawonwarga_api_key: str
     model_dir: str
@@ -24,7 +24,10 @@ class Settings:
 
 def load_settings() -> Settings:
     return Settings(
-        argus_base_url=os.environ["ARGUS_BASE_URL"].rstrip("/"),
+        # Same MongoDB Argus v3 itself writes to (sentimen_{platform}.posts_with_comments)
+        # — see ingest/clients/argus_client.py's module docstring for why this replaced
+        # ARGUS_BASE_URL.
+        mongodb_url=os.environ["MONGODB_URL"],
         pawonwarga_base_url=os.environ["PAWONWARGA_BASE_URL"].rstrip("/"),
         pawonwarga_api_key=os.environ["PAWONWARGA_API_KEY"],
         model_dir=os.environ.get("INGEST_MODEL_DIR", "model_output_tweet/best"),
