@@ -22,7 +22,10 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - internal
+      - pawonwarga-net
 
 networks:
   internal:
     driver: bridge
+  pawonwarga-net:
+    external: true
